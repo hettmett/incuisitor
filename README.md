@@ -9,8 +9,8 @@ Inquisitor is a simple Python3 program to check weak (or not so) SSH logins.
 
 # Installation
 Required:
-    - [Python >= 3.6](https://www.python.org/)
-    - [Python paramiko package](https://www.paramiko.org/)
+- [Python >= 3.6](https://www.python.org/)
+- [Python paramiko package](https://www.paramiko.org/)
 
 # Usage
 
