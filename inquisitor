@@ -1,0 +1,149 @@
+#!/usr/bin/python3
+
+"""
+Copyright (c) 2020 Ruben Manukyan.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+"""
+
+import csv
+import argparse
+import ipaddress
+
+from collections import namedtuple
+from paramiko import (
+    SSHClient,
+    AutoAddPolicy,
+    AuthenticationException,
+    SSHException
+)
+
+
+def main():
+    """ Every program deserves it's own main function
+
+    """
+    data = get_args()
+    list(map(
+        lambda item: inquire(item, data.secrets, data.params), data.ip_list
+    ))
+
+
+def inquire(host: namedtuple, secrets: list, params: dict):
+    """ Start the inquisition of the host
+
+    Parameters
+    ----------
+    host : namedtuple
+    secrets : list
+
+    """
+    ssh = SSHClient()
+
+    # needed to eliminates "not found in known_hosts" error
+    ssh.set_missing_host_key_policy(AutoAddPolicy())
+
+    # open the communication channels
+    for secret in secrets:
+        try:
+            ssh.connect(
+                host.ip,
+                host.port,
+                secret.usr,
+                secret.pwd,
+                timeout=params['conn_timeout'],
+                auth_timeout=params['auth_timeout'],
+                banner_timeout=1
+            )
+            log(host, secret, 'connected')
+            return
+        except AuthenticationException as aex:
+            log(host, secret, 'failed', str(aex))
+        except SSHException as sshex:
+            log(host, secret, 'unknown', str(ex))
+        except Exception as ex:
+            log(host, secret, 'unknown', str(ex))
+        finally:
+            ssh and ssh.close()
+
+
+def log(host: namedtuple, secret: namedtuple, status: str, msg: str = ''):
+    """ Log result to file
+
+    Parameters
+    ----------
+    host : namedtuple
+    secret : namedtuple
+    status : str
+    msg : str
+
+    """
+    print("\t".join(map(str, [
+        host.ip,
+        host.port,
+        secret.usr,
+        secret.pwd,
+        status,
+        msg
+    ])))
+
+
+def get_args() -> namedtuple:
+    """ Parse command line arguments and return the list of valid IP addresses
+
+    Returns
+    -------
+    list
+
+    """
+    parser = argparse.ArgumentParser(
+        prog='Nobody expects the router inquisitor'
+    )
+
+    parser.add_argument('secrets', type=argparse.FileType('r'))
+
+    parser.add_argument('-i', '--ip')
+    parser.add_argument('-p', '--port', type=int, default=22)
+    parser.add_argument('-f', '--hosts', type=argparse.FileType('r'))
+    parser.add_argument('-a', '--auth_timeout', type=int, default=5)
+    parser.add_argument('-c', '--connection_timeout', type=int, default=10)
+
+    args = parser.parse_args()
+
+    secrets = []
+    for row in csv.reader(args.secrets, delimiter=' '):
+        secrets.append(namedtuple('Secret', ('usr', 'pwd'))(row[0], row[1]))
+
+    ip_list = []
+    if args.ip:
+        ipaddress.ip_address(args.ip)
+        ip_list.append(namedtuple('Host', ('ip', 'port'))(args.ip, args.port))
+    elif args.hosts:
+        for ip in args.hosts:
+            ipaddress.ip_address(ip.strip())
+            ip_list.append(namedtuple('Host', ('ip', 'port'))
+                (ip.strip(), args.port)
+            )
+
+    params = {'auth_timeout': args.auth_timeout,
+              'conn_timeout': args.connection_timeout}
+
+    return namedtuple('Subjects',
+        ('ip_list', 'secrets', 'params'))(
+        ip_list, secrets, params
+    )
+
+if __name__ == '__main__':
+    main()
